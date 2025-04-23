@@ -467,7 +467,7 @@ private struct FfiConverterString: FfiConverter {
  * an efficient internal representation for validation. It contains the root node
  * of the schema tree and the configuration options used during compilation.
  */
-public protocol ValidatorWrapperProtocol: AnyObject {
+public protocol ValidatorProtocol: AnyObject {
     /**
      * Run validation against `instance` but return a boolean result instead of an iterator.
      * It is useful for cases, where it is important to only know the fact if the data is valid or not.
@@ -482,8 +482,8 @@ public protocol ValidatorWrapperProtocol: AnyObject {
  * an efficient internal representation for validation. It contains the root node
  * of the schema tree and the configuration options used during compilation.
  */
-open class ValidatorWrapper:
-    ValidatorWrapperProtocol
+open class Validator:
+    ValidatorProtocol
 {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
@@ -518,16 +518,16 @@ open class ValidatorWrapper:
         @_documentation(visibility: private)
     #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_jsonschemavalidator_fn_clone_validatorwrapper(self.pointer, $0) }
+        return try! rustCall { uniffi_jsonschemavalidator_fn_clone_validator(self.pointer, $0) }
     }
 
     /**
-     * Create a validator for the input schema with automatic draft detection and default options.
+     * Create a new JSON Schema validator using Draft 2020-12 specifications and default options.
      */
     public convenience init(schema: String) throws {
         let pointer =
-            try rustCallWithError(FfiConverterTypeValidatorWrapperError.lift) {
-                uniffi_jsonschemavalidator_fn_constructor_validatorwrapper_new(
+            try rustCallWithError(FfiConverterTypeValidatorError.lift) {
+                uniffi_jsonschemavalidator_fn_constructor_validator_new(
                     FfiConverterString.lower(schema), $0
                 )
             }
@@ -539,7 +539,7 @@ open class ValidatorWrapper:
             return
         }
 
-        try! rustCall { uniffi_jsonschemavalidator_fn_free_validatorwrapper(pointer, $0) }
+        try! rustCall { uniffi_jsonschemavalidator_fn_free_validator(pointer, $0) }
     }
 
     /**
@@ -547,9 +547,9 @@ open class ValidatorWrapper:
      * It is useful for cases, where it is important to only know the fact if the data is valid or not.
      */
     open func isValid(instance: String) throws -> Bool {
-        return try FfiConverterBool.lift(rustCallWithError(FfiConverterTypeValidatorWrapperError.lift) {
-            uniffi_jsonschemavalidator_fn_method_validatorwrapper_is_valid(self.uniffiClonePointer(),
-                                                                           FfiConverterString.lower(instance), $0)
+        return try FfiConverterBool.lift(rustCallWithError(FfiConverterTypeValidatorError.lift) {
+            uniffi_jsonschemavalidator_fn_method_validator_is_valid(self.uniffiClonePointer(),
+                                                                    FfiConverterString.lower(instance), $0)
         })
     }
 }
@@ -557,19 +557,19 @@ open class ValidatorWrapper:
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeValidatorWrapper: FfiConverter {
+public struct FfiConverterTypeValidator: FfiConverter {
     typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = ValidatorWrapper
+    typealias SwiftType = Validator
 
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> ValidatorWrapper {
-        return ValidatorWrapper(unsafeFromRawPointer: pointer)
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Validator {
+        return Validator(unsafeFromRawPointer: pointer)
     }
 
-    public static func lower(_ value: ValidatorWrapper) -> UnsafeMutableRawPointer {
+    public static func lower(_ value: Validator) -> UnsafeMutableRawPointer {
         return value.uniffiClonePointer()
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ValidatorWrapper {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Validator {
         let v: UInt64 = try readInt(&buf)
         // The Rust code won't compile if a pointer won't fit in a UInt64.
         // We have to go via `UInt` because that's the thing that's the size of a pointer.
@@ -580,7 +580,7 @@ public struct FfiConverterTypeValidatorWrapper: FfiConverter {
         return try lift(ptr!)
     }
 
-    public static func write(_ value: ValidatorWrapper, into buf: inout [UInt8]) {
+    public static func write(_ value: Validator, into buf: inout [UInt8]) {
         // This fiddling is because `Int` is the thing that's the same size as a pointer.
         // The Rust code won't compile if a pointer won't fit in a `UInt64`.
         writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
@@ -590,22 +590,22 @@ public struct FfiConverterTypeValidatorWrapper: FfiConverter {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeValidatorWrapper_lift(_ pointer: UnsafeMutableRawPointer) throws -> ValidatorWrapper {
-    return try FfiConverterTypeValidatorWrapper.lift(pointer)
+public func FfiConverterTypeValidator_lift(_ pointer: UnsafeMutableRawPointer) throws -> Validator {
+    return try FfiConverterTypeValidator.lift(pointer)
 }
 
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeValidatorWrapper_lower(_ value: ValidatorWrapper) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeValidatorWrapper.lower(value)
+public func FfiConverterTypeValidator_lower(_ value: Validator) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeValidator.lower(value)
 }
 
 /**
- * The error accompanying ValidatorWrapper.
- * It might occur while calling ValidatorWrapper methods.
+ * The error accompanying Validator.
+ * It might occur while calling Validator methods.
  */
-public enum ValidatorWrapperError {
+public enum ValidatorError {
     /**
      * The supplied JSON schema is invalid.
      */
@@ -620,10 +620,10 @@ public enum ValidatorWrapperError {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeValidatorWrapperError: FfiConverterRustBuffer {
-    typealias SwiftType = ValidatorWrapperError
+public struct FfiConverterTypeValidatorError: FfiConverterRustBuffer {
+    typealias SwiftType = ValidatorError
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ValidatorWrapperError {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ValidatorError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         case 1: return try .InvalidSchema(
@@ -638,7 +638,7 @@ public struct FfiConverterTypeValidatorWrapperError: FfiConverterRustBuffer {
         }
     }
 
-    public static func write(_ value: ValidatorWrapperError, into buf: inout [UInt8]) {
+    public static func write(_ value: ValidatorError, into buf: inout [UInt8]) {
         switch value {
         case .InvalidSchema(_ /* message is ignored*/ ):
             writeInt(&buf, Int32(1))
@@ -648,9 +648,9 @@ public struct FfiConverterTypeValidatorWrapperError: FfiConverterRustBuffer {
     }
 }
 
-extension ValidatorWrapperError: Equatable, Hashable {}
+extension ValidatorError: Equatable, Hashable {}
 
-extension ValidatorWrapperError: Foundation.LocalizedError {
+extension ValidatorError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
@@ -672,10 +672,10 @@ private var initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if uniffi_jsonschemavalidator_checksum_method_validatorwrapper_is_valid() != 46079 {
+    if uniffi_jsonschemavalidator_checksum_method_validator_is_valid() != 10114 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_jsonschemavalidator_checksum_constructor_validatorwrapper_new() != 428 {
+    if uniffi_jsonschemavalidator_checksum_constructor_validator_new() != 51815 {
         return InitializationResult.apiChecksumMismatch
     }
 
