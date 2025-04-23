@@ -1,0 +1,4 @@
+module jsonschemavalidatorFFI {
+    header "jsonschemavalidatorFFI.h"
+    export *
+}
