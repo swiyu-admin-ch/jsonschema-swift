@@ -25,10 +25,6 @@ let package = Package(
         .binaryTarget(
             name: "JsonSchemaValidator",
             path: "./jsonschemavalidator.xcframework",
-            cSettings: [
-                .headerSearchPath("."),
-                .unsafeFlags(["-fmodule-map-file=Headers/jsonschemavalidator.modulemap"])
-            ]
         ),
         .target(
             name: "JsonSchemaValidatorSources",
