@@ -17,27 +17,19 @@ let package = Package(
                 .target(name:"JsonSchemaValidator", condition: .when(platforms: [.iOS]))
             ],
             path: "JsonSchemaValidatorWrapper",
+            publicHeadersPath: "Headers",
             cSettings: [
-                .headerSearchPath("."),
-                .unsafeFlags(["-fmodule-map-file=Headers/jsonschemavalidator.modulemap"])
+                .unsafeFlags(["-fmodule-map-file=jsonschemavalidator.xcframework/ios-arm64/Headers/jsonschemavalidator.modulemap"])
             ]
         ),
         .binaryTarget(
             name: "JsonSchemaValidator",
             path: "./jsonschemavalidator.xcframework",
-            cSettings: [
-                .headerSearchPath("."),
-                .unsafeFlags(["-fmodule-map-file=Headers/jsonschemavalidator.modulemap"])
-            ]
         ),
         .target(
             name: "JsonSchemaValidatorSources",
             dependencies: ["JsonSchemaValidatorWrapper"],
             path: "swift-sources",
-            cSettings: [
-                .headerSearchPath("."),
-                .unsafeFlags(["-fmodule-map-file=Headers/jsonschemavalidator.modulemap"])
-            ]
         )
     ]
 )
