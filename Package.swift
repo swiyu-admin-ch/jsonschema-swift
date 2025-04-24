@@ -16,7 +16,11 @@ let package = Package(
             dependencies:[
                 .target(name:"JsonSchemaValidator", condition: .when(platforms: [.iOS]))
             ],
-            path: "JsonSchemaValidatorWrapper"
+            path: "JsonSchemaValidatorWrapper",
+            cSettings: [
+                .headerSearchPath("."),
+                .unsafeFlags(["-fmodule-map-file=Headers/jsonschemavalidator.modulemap"])
+            ]
         ),
         .binaryTarget(
             name: "JsonSchemaValidator",
