@@ -24,12 +24,20 @@ let package = Package(
         ),
         .binaryTarget(
             name: "JsonSchemaValidator",
-            path: "./jsonschemavalidator.xcframework"
+            path: "./jsonschemavalidator.xcframework",
+            cSettings: [
+                .headerSearchPath("."),
+                .unsafeFlags(["-fmodule-map-file=Headers/jsonschemavalidator.modulemap"])
+            ]
         ),
         .target(
             name: "JsonSchemaValidatorSources",
             dependencies: ["JsonSchemaValidatorWrapper"],
-            path: "swift-sources"
+            path: "swift-sources",
+            cSettings: [
+                .headerSearchPath("."),
+                .unsafeFlags(["-fmodule-map-file=Headers/jsonschemavalidator.modulemap"])
+            ]
         )
     ]
 )
