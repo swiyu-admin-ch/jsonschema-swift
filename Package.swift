@@ -17,10 +17,6 @@ let package = Package(
                 .target(name:"JsonSchemaValidator", condition: .when(platforms: [.iOS]))
             ],
             path: "JsonSchemaValidatorWrapper",
-            publicHeadersPath: "Headers",
-            cSettings: [
-                .unsafeFlags(["-fmodule-map-file=jsonschemavalidator.xcframework/ios-arm64/Headers/jsonschemavalidator.modulemap"])
-            ]
         ),
         .binaryTarget(
             name: "JsonSchemaValidator",
