@@ -16,16 +16,16 @@ let package = Package(
             dependencies:[
                 .target(name:"JsonSchemaValidator", condition: .when(platforms: [.iOS]))
             ],
-            path: "JsonSchemaValidatorWrapper",
+            path: "JsonSchemaValidatorWrapper"
         ),
         .binaryTarget(
             name: "JsonSchemaValidator",
-            path: "./jsonschemavalidator.xcframework",
+            path: "./jsonschemavalidator.xcframework"
         ),
         .target(
             name: "JsonSchemaValidatorSources",
             dependencies: ["JsonSchemaValidatorWrapper"],
-            path: "swift-sources",
+            path: "swift-sources"
         )
     ]
 )
