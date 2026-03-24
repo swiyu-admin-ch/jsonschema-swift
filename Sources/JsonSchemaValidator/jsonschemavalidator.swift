@@ -352,19 +352,29 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
+// Initial value and increment amount for handles. 
+// These ensure that SWIFT handles always have the lowest bit set
+fileprivate let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
+fileprivate let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
+
 fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
     // All mutation happens with this lock held, which is why we implement @unchecked Sendable.
     private let lock = NSLock()
     private var map: [UInt64: T] = [:]
-    private var currentHandle: UInt64 = 1
+    private var currentHandle: UInt64 = UNIFFI_HANDLEMAP_INITIAL
 
     func insert(obj: T) -> UInt64 {
         lock.withLock {
-            let handle = currentHandle
-            currentHandle += 1
-            map[handle] = obj
-            return handle
+            return doInsert(obj)
         }
+    }
+
+    // Low-level insert function, this assumes `lock` is held.
+    private func doInsert(_ obj: T) -> UInt64 {
+        let handle = currentHandle
+        currentHandle += UNIFFI_HANDLEMAP_DELTA
+        map[handle] = obj
+        return handle
     }
 
      func get(handle: UInt64) throws -> T {
@@ -373,6 +383,15 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
                 throw UniffiInternalError.unexpectedStaleHandle
             }
             return obj
+        }
+    }
+
+     func clone(handle: UInt64) throws -> UInt64 {
+        try lock.withLock {
+            guard let obj = map[handle] else {
+                throw UniffiInternalError.unexpectedStaleHandle
+            }
+            return doInsert(obj)
         }
     }
 
@@ -489,13 +508,13 @@ public protocol ValidatorProtocol: AnyObject, Sendable {
  * of the schema tree and the configuration options used during compilation.
  */
 open class Validator: ValidatorProtocol, @unchecked Sendable {
-    fileprivate let pointer: UnsafeMutableRawPointer!
+    fileprivate let handle: UInt64
 
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public struct NoPointer {
+    public struct NoHandle {
         public init() {}
     }
 
@@ -505,47 +524,48 @@ open class Validator: ValidatorProtocol, @unchecked Sendable {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
     }
 
     // This constructor can be used to instantiate a fake object.
-    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
     //
     // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public init(noPointer: NoPointer) {
-        self.pointer = nil
+    public init(noHandle: NoHandle) {
+        self.handle = 0
     }
 
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_jsonschemavalidator_fn_clone_validator(self.pointer, $0) }
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_jsonschemavalidator_fn_clone_validator(self.handle, $0) }
     }
     /**
      * Create a new JSON Schema validator using Draft 2020-12 specifications and default options.
      */
 public convenience init(schema: String)throws  {
-    let pointer =
+    let handle =
         try rustCallWithError(FfiConverterTypeValidatorError_lift) {
     uniffi_jsonschemavalidator_fn_constructor_validator_new(
         FfiConverterString.lower(schema),$0
     )
 }
-    self.init(unsafeFromRawPointer: pointer)
+    self.init(unsafeFromHandle: handle)
 }
 
     deinit {
-        guard let pointer = pointer else {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
             return
         }
 
-        try! rustCall { uniffi_jsonschemavalidator_fn_free_validator(pointer, $0) }
+        try! rustCall { uniffi_jsonschemavalidator_fn_free_validator(handle, $0) }
     }
 
     
@@ -557,13 +577,15 @@ public convenience init(schema: String)throws  {
      */
 open func isValid(instance: String)throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeValidatorError_lift) {
-    uniffi_jsonschemavalidator_fn_method_validator_is_valid(self.uniffiClonePointer(),
+    uniffi_jsonschemavalidator_fn_method_validator_is_valid(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(instance),$0
     )
 })
 }
     
 
+    
 }
 
 
@@ -571,33 +593,24 @@ open func isValid(instance: String)throws  -> Bool  {
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeValidator: FfiConverter {
-
-    typealias FfiType = UnsafeMutableRawPointer
+    typealias FfiType = UInt64
     typealias SwiftType = Validator
 
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Validator {
-        return Validator(unsafeFromRawPointer: pointer)
+    public static func lift(_ handle: UInt64) throws -> Validator {
+        return Validator(unsafeFromHandle: handle)
     }
 
-    public static func lower(_ value: Validator) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
+    public static func lower(_ value: Validator) -> UInt64 {
+        return value.uniffiCloneHandle()
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Validator {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
     }
 
     public static func write(_ value: Validator, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+        writeInt(&buf, lower(value))
     }
 }
 
@@ -605,14 +618,14 @@ public struct FfiConverterTypeValidator: FfiConverter {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeValidator_lift(_ pointer: UnsafeMutableRawPointer) throws -> Validator {
-    return try FfiConverterTypeValidator.lift(pointer)
+public func FfiConverterTypeValidator_lift(_ handle: UInt64) throws -> Validator {
+    return try FfiConverterTypeValidator.lift(handle)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeValidator_lower(_ value: Validator) -> UnsafeMutableRawPointer {
+public func FfiConverterTypeValidator_lower(_ value: Validator) -> UInt64 {
     return FfiConverterTypeValidator.lower(value)
 }
 
@@ -623,7 +636,7 @@ public func FfiConverterTypeValidator_lower(_ value: Validator) -> UnsafeMutable
  * The error accompanying Validator.
  * It might occur while calling Validator methods.
  */
-public enum ValidatorError: Swift.Error {
+public enum ValidatorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -637,8 +650,21 @@ public enum ValidatorError: Swift.Error {
      */
     case DeserializationError(message: String)
     
+
+    
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension ValidatorError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -697,21 +723,6 @@ public func FfiConverterTypeValidatorError_lower(_ value: ValidatorError) -> Rus
     return FfiConverterTypeValidatorError.lower(value)
 }
 
-
-extension ValidatorError: Equatable, Hashable {}
-
-
-
-
-extension ValidatorError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
-
-
-
 private enum InitializationResult {
     case ok
     case contractVersionMismatch
@@ -721,13 +732,13 @@ private enum InitializationResult {
 // the code inside is only computed once.
 private let initializationResult: InitializationResult = {
     // Get the bindings contract version from our ComponentInterface
-    let bindings_contract_version = 29
+    let bindings_contract_version = 30
     // Get the scaffolding contract version by calling the into the dylib
     let scaffolding_contract_version = ffi_jsonschemavalidator_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_jsonschemavalidator_checksum_method_validator_is_valid() != 10114) {
+    if (uniffi_jsonschemavalidator_checksum_method_validator_is_valid() != 6750) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_jsonschemavalidator_checksum_constructor_validator_new() != 54145) {
