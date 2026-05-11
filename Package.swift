@@ -1,11 +1,11 @@
 // swift-tools-version:5.3
 import PackageDescription
 
-let version = "0.46.4"
+let version = "main"
 let xcframework_name = "jsonschemavalidator"
 let binary_target_url_github_owner = "swiyu-admin-ch"
 let binary_target_url_github_repo = "jsonschema-swift"
-let checksum = "6a95cb9cd2e44a72fda43d99121d3f4ee6e89d77bd1bbb3274941590530763e6"
+let checksum = "00d845cdd6afb80e06002c80592627709a1cb678c2c61e4f2e6d240acadf171d"
 
 let package = Package(
     name: "JsonSchemaValidator",
